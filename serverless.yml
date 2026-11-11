@@ -1,0 +1,201 @@
+org: luisnieva
+service: ms-presupuestos
+
+custom:
+  # CAMBIAR: un correo por tenant. Cada uno recibe el aviso de presupuesto excedido
+  # de su tenant. Despues del deploy llega un correo de AWS: hay que confirmar la suscripcion.
+  correoACM: luise.nievac18+acm@gmail.com
+  correoORACLE: luise.nievac18+oracle@gmail.com
+  correoLUDOTECA: luise.nievac18+ludoteca@gmail.com
+
+provider:
+  name: aws
+  runtime: python3.12
+  timeout: 30
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    TOPIC_PRESUPUESTOS_ARN: arn:aws:sns:${aws:region}:${aws:accountId}:tema-presupuestos
+
+functions:
+  crearPresupuesto:
+    name: CrearPresupuesto
+    handler: crear_presupuesto.lambda_handler
+    events:
+      - http:
+          path: /presupuestos/crear
+          method: post
+          cors: true
+          integration: lambda
+  buscarPresupuesto:
+    name: BuscarPresupuesto
+    handler: buscar_presupuesto.lambda_handler
+    events:
+      - http:
+          path: /presupuestos/buscar
+          method: post
+          cors: true
+          integration: lambda
+  modificarPresupuesto:
+    name: ModificarPresupuesto
+    handler: modificar_presupuesto.lambda_handler
+    events:
+      - http:
+          path: /presupuestos/modificar
+          method: put
+          cors: true
+          integration: lambda
+  registrarGasto:
+    name: RegistrarGasto
+    handler: registrar_gasto.lambda_handler
+    events:
+      - http:
+          path: /gastos/registrar
+          method: post
+          cors: true
+          integration: lambda
+  listarGastos:
+    name: ListarGastos
+    handler: listar_gastos.lambda_handler
+    events:
+      - http:
+          path: /gastos/listar
+          method: post
+          cors: true
+          integration: lambda
+  procesarAsignaciones:
+    name: ProcesarAsignaciones
+    handler: procesar_asignaciones.lambda_handler
+    events:
+      - sqs:
+          arn: !GetAtt ColaPresupuestosAsignaciones.Arn
+          batchSize: 1
+
+resources:
+  Resources:
+    # ---------- Tablas DynamoDB ----------
+    TablaPresupuestos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: t_presupuestos
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+          - AttributeName: proyecto_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+          - AttributeName: proyecto_id
+            KeyType: RANGE
+    TablaGastos:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: t_gastos
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+          - AttributeName: gasto_id
+            AttributeType: S
+          - AttributeName: proyecto_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+          - AttributeName: gasto_id
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: gsi_proyecto
+            KeySchema:
+              - AttributeName: tenant_id
+                KeyType: HASH
+              - AttributeName: proyecto_id
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    # ---------- SNS: tema que publica este microservicio ----------
+    TemaPresupuestos:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: tema-presupuestos
+
+    # Proyectos marca estado_presupuesto = EXCEDIDO (la cola la crea ms-proyectos)
+    SuscripcionProyectosAPresupuestos:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref TemaPresupuestos
+        Protocol: sqs
+        Endpoint: arn:aws:sqs:${aws:region}:${aws:accountId}:cola-proyectos-eventos
+        FilterPolicy:
+          tipo_evento:
+            - PresupuestoExcedido
+
+    # Un correo por tenant, con filtro por tenant_id
+    CorreoACM:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref TemaPresupuestos
+        Protocol: email
+        Endpoint: ${self:custom.correoACM}
+        FilterPolicy:
+          tenant_id:
+            - ACM
+          tipo_evento:
+            - PresupuestoExcedido
+    CorreoORACLE:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref TemaPresupuestos
+        Protocol: email
+        Endpoint: ${self:custom.correoORACLE}
+        FilterPolicy:
+          tenant_id:
+            - ORACLE
+          tipo_evento:
+            - PresupuestoExcedido
+    CorreoLUDOTECA:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref TemaPresupuestos
+        Protocol: email
+        Endpoint: ${self:custom.correoLUDOTECA}
+        FilterPolicy:
+          tenant_id:
+            - LUDOTECA
+          tipo_evento:
+            - PresupuestoExcedido
+
+    # ---------- SQS: cola que consume este microservicio ----------
+    ColaPresupuestosAsignacionesDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: cola-presupuestos-asignaciones-dlq
+    ColaPresupuestosAsignaciones:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: cola-presupuestos-asignaciones
+        VisibilityTimeout: 180
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ColaPresupuestosAsignacionesDLQ.Arn
+          maxReceiveCount: 2
+    # Acepta mensajes de cualquier tema tema-* de la cuenta (la suscripcion
+    # de tema-recursos a esta cola la declara ms-recursos, que se despliega despues).
+    PoliticaColaPresupuestos:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref ColaPresupuestosAsignaciones
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: sns.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt ColaPresupuestosAsignaciones.Arn
+              Condition:
+                ArnLike:
+                  aws:SourceArn: arn:aws:sns:${aws:region}:${aws:accountId}:tema-*
