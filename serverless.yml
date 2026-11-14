@@ -18,46 +18,34 @@ provider:
     TOPIC_PRESUPUESTOS_ARN: arn:aws:sns:${aws:region}:${aws:accountId}:tema-presupuestos
 
 functions:
-  crearPresupuesto:
-    name: CrearPresupuesto
-    handler: crear_presupuesto.lambda_handler
+  presupuestos:
+    name: Presupuestos
+    handler: presupuestos.lambda_handler
     events:
       - http:
           path: /presupuestos/crear
           method: post
           cors: true
           integration: lambda
-  buscarPresupuesto:
-    name: BuscarPresupuesto
-    handler: buscar_presupuesto.lambda_handler
-    events:
       - http:
           path: /presupuestos/buscar
           method: post
           cors: true
           integration: lambda
-  modificarPresupuesto:
-    name: ModificarPresupuesto
-    handler: modificar_presupuesto.lambda_handler
-    events:
       - http:
           path: /presupuestos/modificar
           method: put
           cors: true
           integration: lambda
-  registrarGasto:
-    name: RegistrarGasto
-    handler: registrar_gasto.lambda_handler
+  gastos:
+    name: Gastos
+    handler: gastos.lambda_handler
     events:
       - http:
           path: /gastos/registrar
           method: post
           cors: true
           integration: lambda
-  listarGastos:
-    name: ListarGastos
-    handler: listar_gastos.lambda_handler
-    events:
       - http:
           path: /gastos/listar
           method: post

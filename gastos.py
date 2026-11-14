@@ -1,10 +1,13 @@
+# Lambda Gastos (ms-presupuestos). Una sola Lambda atiende varios endpoints.
+# API Gateway (integration: lambda) manda en "requestPath" la ruta del recurso.
 import os
 import uuid
+from boto3.dynamodb.conditions import Key
+from comun import dynamodb, NO_AUTORIZADO, respuesta, autenticar, numero_positivo, verificar_exceso, parametros_lista
 from datetime import datetime
-from comun import (dynamodb, NO_AUTORIZADO, respuesta, autenticar, numero_positivo,
-                   verificar_exceso)
 
-def lambda_handler(event, context):
+
+def registrar_gasto(event, context):
     # Proteger el Lambda
     sesion = autenticar(event)
     if not sesion:
@@ -46,3 +49,37 @@ def lambda_handler(event, context):
         presupuesto['estado_presupuesto'] = 'EXCEDIDO'
     # Salida (json)
     return respuesta(200, gasto=gasto, presupuesto=presupuesto)
+
+
+def listar_gastos(event, context):
+    # Proteger el Lambda
+    sesion = autenticar(event)
+    if not sesion:
+        return NO_AUTORIZADO
+    tenant_id = sesion['tenant_id']
+    # Entrada (json): proyecto_id, limit y last_key son opcionales
+    body = event.get('body') or {}
+    # Proceso
+    kwargs = parametros_lista(body)
+    if body.get('proyecto_id'):
+        kwargs['IndexName'] = 'gsi_proyecto'
+        kwargs['KeyConditionExpression'] = Key('tenant_id').eq(tenant_id) & Key('proyecto_id').eq(body['proyecto_id'])
+    else:
+        kwargs['KeyConditionExpression'] = Key('tenant_id').eq(tenant_id)
+    r = dynamodb.Table('t_gastos').query(**kwargs)
+    # Salida (json)
+    return respuesta(200, items=r['Items'], count=r['Count'],
+                     last_key=r.get('LastEvaluatedKey'))
+
+
+RUTAS = {
+    '/gastos/registrar': registrar_gasto,
+    '/gastos/listar': listar_gastos,
+}
+
+def lambda_handler(event, context):
+    ruta = (event or {}).get('requestPath')
+    funcion = RUTAS.get(ruta)
+    if funcion is None:
+        return {'statusCode': 404, 'mensaje': 'Ruta no encontrada: %s' % ruta}
+    return funcion(event, context)

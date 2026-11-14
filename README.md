@@ -9,7 +9,7 @@ Microservicio de Presupuestos y Gastos del SaaS PPM (multi-tenant, serverless).
 3. `serverless deploy`
 4. Abrir los correos de AWS Notifications y confirmar cada suscripcion ("Confirm subscription").
 
-Crea: 6 Lambdas, tablas `t_presupuestos` y `t_gastos`, tema SNS `tema-presupuestos`,
+Crea: 3 Lambdas, tablas `t_presupuestos` y `t_gastos`, tema SNS `tema-presupuestos`,
 cola SQS `cola-presupuestos-asignaciones` (+ DLQ), la suscripcion de `cola-proyectos-eventos`
 y 3 suscripciones de correo con filtro por tenant.
 
@@ -19,11 +19,11 @@ Los `tenant_id` van en MAYUSCULAS: ACM, ORACLE, LUDOTECA (el filtro de correo di
 
 | Ruta | Lambda | Cuerpo |
 | --- | --- | --- |
-| POST /presupuestos/crear | CrearPresupuesto | proyecto_id, monto_total |
-| POST /presupuestos/buscar | BuscarPresupuesto | proyecto_id |
-| PUT /presupuestos/modificar | ModificarPresupuesto | proyecto_id, monto_total |
-| POST /gastos/registrar | RegistrarGasto | proyecto_id, monto, concepto?, fecha? |
-| POST /gastos/listar | ListarGastos | proyecto_id?, limit?, last_key? |
+| POST /presupuestos/crear | Presupuestos (`presupuestos.py`) | proyecto_id, monto_total |
+| POST /presupuestos/buscar | Presupuestos (`presupuestos.py`) | proyecto_id |
+| PUT /presupuestos/modificar | Presupuestos (`presupuestos.py`) | proyecto_id, monto_total |
+| POST /gastos/registrar | Gastos (`gastos.py`) | proyecto_id, monto, concepto?, fecha? |
+| POST /gastos/listar | Gastos (`gastos.py`) | proyecto_id?, limit?, last_key? |
 
 Sin ruta: `ProcesarAsignaciones` (lo dispara SQS).
 
@@ -45,3 +45,13 @@ Sin ruta: `ProcesarAsignaciones` (lo dispara SQS).
    -> `estado_presupuesto` = EXCEDIDO, llega el correo, y `POST /proyectos/buscar`
    muestra `estado_presupuesto` = EXCEDIDO (unos segundos despues).
 5. Un tercer gasto NO manda otro correo.
+
+## Estructura de Lambdas (3)
+
+Una Lambda atiende varios endpoints: el codigo elige la funcion segun la ruta (`requestPath` de API Gateway).
+
+- `presupuestos.py` -> Lambda **Presupuestos**: /presupuestos/crear, /presupuestos/buscar, /presupuestos/modificar
+- `gastos.py` -> Lambda **Gastos**: /gastos/registrar, /gastos/listar
+- `procesar_asignaciones.py` (trigger SQS).
+
+`comun.py` es codigo compartido (token, respuestas, helpers), no es una Lambda.
