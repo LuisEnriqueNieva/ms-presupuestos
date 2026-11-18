@@ -33,6 +33,11 @@ functions:
           cors: true
           integration: lambda
       - http:
+          path: /presupuestos/listar
+          method: post
+          cors: true
+          integration: lambda
+      - http:
           path: /presupuestos/modificar
           method: put
           cors: true
@@ -58,6 +63,7 @@ functions:
       - sqs:
           arn: !GetAtt ColaPresupuestosAsignaciones.Arn
           batchSize: 1
+          maximumConcurrency: 2
 
 resources:
   Resources:

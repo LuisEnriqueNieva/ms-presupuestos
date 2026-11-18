@@ -21,6 +21,7 @@ Los `tenant_id` van en MAYUSCULAS: ACM, ORACLE, LUDOTECA (el filtro de correo di
 | --- | --- | --- |
 | POST /presupuestos/crear | Presupuestos (`presupuestos.py`) | proyecto_id, monto_total |
 | POST /presupuestos/buscar | Presupuestos (`presupuestos.py`) | proyecto_id |
+| POST /presupuestos/listar | Presupuestos (`presupuestos.py`) | estado_presupuesto? (NORMAL o EXCEDIDO), limit?, last_key? |
 | PUT /presupuestos/modificar | Presupuestos (`presupuestos.py`) | proyecto_id, monto_total |
 | POST /gastos/registrar | Gastos (`gastos.py`) | proyecto_id, monto, concepto?, fecha? |
 | POST /gastos/listar | Gastos (`gastos.py`) | proyecto_id?, limit?, last_key? |
@@ -34,7 +35,7 @@ Sin ruta: `ProcesarAsignaciones` (lo dispara SQS).
   EXCEDIDO) y el correo del tenant. Priorizacion lo recibira cuando se despliegue
   (su suscripcion la declara ms-priorizacion).
 - Consume `AsignacionCreada` (de ms-recursos): suma el `costo` de la asignacion a
-  `costo_proyectado`. Hasta desplegar Recursos, esta cola no recibe nada.
+  `costo_proyectado`. Consume `AsignacionEliminada`: lo descuenta. Hasta desplegar Recursos, esta cola no recibe nada.
 
 ## Prueba rapida
 

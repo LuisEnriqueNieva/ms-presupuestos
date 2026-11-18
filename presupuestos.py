@@ -1,7 +1,8 @@
 # Lambda Presupuestos (ms-presupuestos). Una sola Lambda atiende varios endpoints.
 # API Gateway (integration: lambda) manda en "requestPath" la ruta del recurso.
 import os
-from comun import dynamodb, NO_AUTORIZADO, respuesta, autenticar, proyecto_existe, numero_positivo, verificar_exceso
+from boto3.dynamodb.conditions import Key, Attr
+from comun import dynamodb, NO_AUTORIZADO, respuesta, autenticar, proyecto_existe, numero_positivo, verificar_exceso, parametros_lista
 from datetime import datetime
 
 
@@ -89,9 +90,29 @@ def modificar_presupuesto(event, context):
     return respuesta(200, presupuesto=presupuesto)
 
 
+def listar_presupuestos(event, context):
+    # Proteger el Lambda
+    sesion = autenticar(event)
+    if not sesion:
+        return NO_AUTORIZADO
+    tenant_id = sesion['tenant_id']
+    # Entrada (json): estado_presupuesto (NORMAL o EXCEDIDO), limit y last_key son opcionales
+    body = event.get('body') or {}
+    # Proceso: solo los presupuestos del tenant del token
+    kwargs = parametros_lista(body)
+    kwargs['KeyConditionExpression'] = Key('tenant_id').eq(tenant_id)
+    if body.get('estado_presupuesto') in ('NORMAL', 'EXCEDIDO'):
+        kwargs['FilterExpression'] = Attr('estado_presupuesto').eq(body['estado_presupuesto'])
+    r = dynamodb.Table('t_presupuestos').query(**kwargs)
+    # Salida (json)
+    return respuesta(200, items=r['Items'], count=r['Count'],
+                     last_key=r.get('LastEvaluatedKey'))
+
+
 RUTAS = {
     '/presupuestos/crear': crear_presupuesto,
     '/presupuestos/buscar': buscar_presupuesto,
+    '/presupuestos/listar': listar_presupuestos,
     '/presupuestos/modificar': modificar_presupuesto,
 }
 
