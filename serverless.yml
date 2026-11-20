@@ -174,7 +174,7 @@ resources:
         VisibilityTimeout: 180
         RedrivePolicy:
           deadLetterTargetArn: !GetAtt ColaPresupuestosAsignacionesDLQ.Arn
-          maxReceiveCount: 2
+          maxReceiveCount: 5
     # Acepta mensajes de cualquier tema tema-* de la cuenta (la suscripcion
     # de tema-recursos a esta cola la declara ms-recursos, que se despliega despues).
     PoliticaColaPresupuestos:
